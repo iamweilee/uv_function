@@ -12,9 +12,12 @@ libuv大致分为io和非io的handle，非io的handle会直接在uv_run中运行
 
 io的有，event,pipe,socket,inotify,
 非io的有，idle，queue_work,
-特殊的是普通文件的读写，因为普通文件的读写一直是就绪状态，所以不能使用epoll来检查，libuv的实现是在后台的线程池（threadpool.c）中运行file的操作，等待操作完成后调用,uv_async_send，模拟异步回调。
+特殊的是普通文件的读写，因为普通文件的读写一直是就绪状态，所以不能使用epoll来检查，libuv的
+实现是在后台的线程池（threadpool.c）中运行file的操作，等待操作完成后调用,uv_async_send，模拟异步回调。
 
-libuv通过把各种handle加入到queue中，把fd的handle加入到watcher queue中，uv_run会优先执行其他的queue，然后进入uv__io_poll，从watcher queue中，取出handle,调用epoll_ctl，注册到epoll中，然后执行epoll_wait，等待io就绪，然后执行handle的callback，进而执行用户的callback。在uv__io_poll方法中，最大循环次数是48次
+libuv通过把各种handle加入到queue中，把fd的handle加入到watcher queue中，uv_run会优先执行其他的queue，然
+后进入uv__io_poll，从watcher queue中，取出handle,调用epoll_ctl，注册到epoll中，然后执行epoll_wait，等
+待io就绪，然后执行handle的callback，进而执行用户的callback。在uv__io_poll方法中，最大循环次数是48次
 
 
 ```
@@ -74,7 +77,8 @@ handle->dispatched_signals =0
 ```c++
 
 uv__signal_loop_once_init(uv_loop_t* loop)
-功能：初始化loop->signal_io_watcher，使用uv__make_pipe()给loop->signal_pipefd赋值，把loop->signal_io_watcher加入到loop->watcehr_queue中，事件使用的是pollin
+功能：初始化loop->signal_io_watcher，使用uv__make_pipe()给loop->signal_pipefd赋值，把
+loop->signal_io_watcher加入到loop->watcehr_queue中，事件使用的是pollin
 
 ```
 
@@ -162,7 +166,8 @@ wq_async,uv_async_t，是一个handle
 
 
 ```c++
-linux-syscalls.c，通过syscall系统函数完成，比如epoll_ctl,epoll_create,epoll_wait,pipe2,inotify,sendmsg,dup3,accept,eventfd等。
+linux-syscalls.c，通过syscall系统函数完成，比如epoll_ctl,epoll_create,epoll_wait,pipe2,
+inotify,sendmsg,dup3,accept,eventfd等。
 
 系统调用号如下：
 /*
