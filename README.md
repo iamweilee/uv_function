@@ -28,7 +28,21 @@ uv_write2()
 
 ```
 
+```c++
 
+fs.c文件操作流程
+
+普通文件的读写还是同步阻塞过程，只是在一个后台线程中完成，使用epoll来模拟异步回调完成
+
+1.执行的是uv_fs_*类函数
+2.调用 POST
+3.匹配各种uv__fs_*
+4.uv__work_submit(loop,loop->work_req,uv__fs_work,uv__fs_done)
+5.threadpool.c uv__fs_work
+6.uv_run调用uv__fs_done
+7.完成用户回调
+
+```
 
 ```c++
 uv__io_init(uv__io_t*w,uv__io_cb cb,init fd)
