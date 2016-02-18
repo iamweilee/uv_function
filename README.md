@@ -151,6 +151,75 @@ internal
 
 ```
 
+###async.c 操作详解
+
+主要涉及到两个方法：uv_async_init(),uv_async_send()
+
+```c++
+
+int uv_async_init(uv_loop_t* loop,uv_async_t* handle,uv_async_cb async_cb)
+功能：在loop->watcher_queue创建io_watcher,epoll检测fd的pollin事件
+1.调用uv__async_start()
+2.调用uv__handle_init()，把handle插入到loop->handle_queue中
+3.handle->async_cb = async_cb
+4.handle->pending = 0
+5.把handle插入到loop->async_handles队列中，会在uv__aysnc_event中执行，从async_handles pop出来，执行handle->async_cb()回调
+6.uv__handle_start，给handle->flags设置标志位handle_active，给loop->active_handles++
+
+```
+```c++
+
+uv_async_send(uv_async_t* handle)
+1.注意使用了if (cmpxchgi(&handle->pending, 0, 1) == 0)，原子比较测试，通过pending标志位，起到同步作用，在并发编程中，是原子
+比较实现lock-free
+2.内部调用uv__async_send(loop->async_watcher)
+
+```
+
+
+
+```c++
+
+int uv__async_start(uv_loop_t* loop,struct uv__async* wa,uv_async_cb cb)
+功能：初始化好wa，把wa->io_watcher加入到loop->watcher_queue中，让epoll检测pollin事件
+1.使用eventfd创建事件。
+2.如果eventfd创建失败，使用uv__nake_pipe创建pipe2或者pipe,使用nonblocking
+3.如果创建pipe成功，把pipe读写两端fd设置成 open(/proc/self/fd/%d)的fd.
+if (err == 0) {
+   char buf[32];
+   int fd;
+
+   snprintf(buf, sizeof(buf), "/proc/self/fd/%d", pipefd[0]);
+   fd = uv__open_cloexec(buf, O_RDWR);
+   if (fd >= 0) {
+      uv__close(pipefd[0]);
+      uv__close(pipefd[1]);
+      pipefd[0] = fd;
+      pipefd[1] = fd;
+   }
+}
+uv__open_cloexec() :fd = open(path, flags | UV__O_CLOEXEC);
+4.通过uv__io_init设置wa->io_watcher,cb=uv__async_io方法,fd = pipe[0]
+pipe[0] 要不就是eventfd或者/proc/self/fd/%d file fd
+5.用过uv__io_start设置pollin，把wa->io_watcher加入到loop->watcher_queue中
+6.wa->wfd=pipefd[1]
+7.wa->cb=uv_async_cb
+
+```
+
+```c++
+
+uv__async_io(loop,uv__io_t,events)
+功能：epoll检测pollin事件后，调用此方法，具体看uv__async_start方法中，把io_watcher->cb=uv__async_io
+读取w->fd,w既是io_watcher，调用io_watcher 的parent，async_wathcer->cb()，cb=uv__async_event方法，从
+而调用用户定义的callback
+
+1.r = read(io_watcher->fd,buf,sizeof(buf))
+2.通过io_watcher查找出uv__async，wa
+3.调用wa->cb()
+
+
+```
 
 ```C++
 uv_loop_t
