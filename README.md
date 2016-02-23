@@ -246,7 +246,14 @@ wq_async,uv_async_t，是一个handle
 
 
 ```
+```c++
+loop->handle_queue说明
+在uv_**_init的时候，把用户handle加入到loop->handle_queue中。
+在uv_**_close的时候，把用户handle从loop->handle_queue中去掉。
+handle_queue并不参与实际的流程
 
+
+```
 
 ```c++
 linux-syscalls.c，通过syscall系统函数完成，比如epoll_ctl,epoll_create,epoll_wait,pipe2,
