@@ -154,6 +154,7 @@ internal
 ###async.c 操作详解
 
 主要流程：
+
 1. 创建eventfd或者pipefd
 
 2. 把写句柄赋值给loop->async_watcher->wfd，把读句柄赋值给loop->async_watcher->io_watcher->fd
