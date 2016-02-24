@@ -153,6 +153,30 @@ internal
 
 ###async.c 操作详解
 
+主要流程：
+1.创建eventfd或者pipefd
+2.把写句柄赋值给loop->async_watcher->wfd，把读句柄赋值给loop->async_watcher->io_watcher->fd
+3.把用户handle插入loop->handle_queue，来管理用户handle即uv_async_t，最终使用uv_async_close
+来销毁用户handle
+4.把用户handle插入到loop->async_handles中
+5.使用cmpxchgi函数把handle->pending置值为1,cmpxchgi(&handle->pending, 0, 1) == 0
+6.使用loop->async_watcher->wfd write 1
+7.epoll检测epollin事件，调用uv__async_io函数
+8.调用uv__async_event函数，从loop->async_handles中取出所有handle foreach，使用
+cmpxchgi(&h->pending, 1, 0) == 0，判断如果pending=1，那么调用用户callback，并且
+把handle->pending值成0，如果pending=0,忽略此handle，并且把handle重新插入到
+loop->async_handls的尾部
+
+通过上面的步骤，实现async，大家可能发现了，如果用定义了多个handle，并且多次调用
+uv_async_send，其实epoll都是在检测同一个loop->async_watcher->io_watcher，所以libuv
+是通过一个loop->async_watcher->io_watcher来实现所有用户的handle callback，那么实
+现的关键点是，handle->pending，在send的时候，原子赋值为1，callback的时候原子赋值
+为0，没有调用send的用户handle,pending一直是0，所以在foreach loop->async_handles
+队列时，不会去执行没有调用send函数的handle callback
+
+所以总结下来，一个loop，一个async_watcher对象，一个io_watcher对象，通过pending
+来控制回调
+
 主要涉及到两个方法：uv_async_init(),uv_async_send()
 
 ```c++
@@ -163,14 +187,16 @@ int uv_async_init(uv_loop_t* loop,uv_async_t* handle,uv_async_cb async_cb)
 2.调用uv__handle_init()，把handle插入到loop->handle_queue中
 3.handle->async_cb = async_cb
 4.handle->pending = 0
-5.把handle插入到loop->async_handles队列中，会在uv__aysnc_event中执行，从async_handles pop出来，执行handle->async_cb()回调
+5.把handle插入到loop->async_handles队列中，会在uv__aysnc_event中执行，从async_handles pop出来，
+执行handle->async_cb()回调
 6.uv__handle_start，给handle->flags设置标志位handle_active，给loop->active_handles++
 
 ```
 ```c++
 
 uv_async_send(uv_async_t* handle)
-1.注意使用了if (cmpxchgi(&handle->pending, 0, 1) == 0)，原子比较测试，通过pending标志位，起到同步作用，在并发编程中，是原子
+1.注意使用了if (cmpxchgi(&handle->pending, 0, 1) == 0)，原子比较测试，通过pending标志位，起到
+同步作用，在并发编程中，是原子
 比较实现lock-free
 2.内部调用uv__async_send(loop->async_watcher)
 
