@@ -154,15 +154,22 @@ internal
 ###async.c 操作详解
 
 主要流程：
-1.创建eventfd或者pipefd
-2.把写句柄赋值给loop->async_watcher->wfd，把读句柄赋值给loop->async_watcher->io_watcher->fd
-3.把用户handle插入loop->handle_queue，来管理用户handle即uv_async_t，最终使用uv_async_close
+1. 创建eventfd或者pipefd
+
+2. 把写句柄赋值给loop->async_watcher->wfd，把读句柄赋值给loop->async_watcher->io_watcher->fd
+
+3. 把用户handle插入loop->handle_queue，来管理用户handle即uv_async_t，最终使用uv_async_close
 来销毁用户handle
-4.把用户handle插入到loop->async_handles中
-5.使用cmpxchgi函数把handle->pending置值为1,cmpxchgi(&handle->pending, 0, 1) == 0
-6.使用loop->async_watcher->wfd write 1
-7.epoll检测epollin事件，调用uv__async_io函数
-8.调用uv__async_event函数，从loop->async_handles中取出所有handle foreach，使用
+
+4. 把用户handle插入到loop->async_handles中
+
+5. 使用cmpxchgi函数把handle->pending置值为1,cmpxchgi(&handle->pending, 0, 1) == 0
+
+6. 使用loop->async_watcher->wfd write 1
+
+7. epoll检测epollin事件，调用uv__async_io函数
+
+8. 调用uv__async_event函数，从loop->async_handles中取出所有handle foreach，使用
 cmpxchgi(&h->pending, 1, 0) == 0，判断如果pending=1，那么调用用户callback，并且
 把handle->pending值成0，如果pending=0,忽略此handle，并且把handle重新插入到
 loop->async_handls的尾部
@@ -176,6 +183,14 @@ uv_async_send，其实epoll都是在检测同一个loop->async_watcher->io_watch
 
 所以总结下来，一个loop，一个async_watcher对象，一个io_watcher对象，通过pending
 来控制回调
+
+
+```c++
+cmpxchgi(void *ptr, unsigned long old, unsigned long new);
+
+将old和ptr指向的内容比较，如果相等，则将new写入到ptr中，返回old，如果不相等，则返回ptr指向的内容。
+
+```
 
 主要涉及到两个方法：uv_async_init(),uv_async_send()
 
